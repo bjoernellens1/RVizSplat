@@ -42,10 +42,6 @@ BlobAssembler::Result BlobAssembler::addChunk(
     out.error = "Blob chunk_size does not match data size.";
     return out;
   }
-  if (msg.total_size == 0) {
-    out.error = "Blob total_size is 0.";
-    return out;
-  }
   if (msg.chunk_size > msg.total_size) {
     out.error = "Blob chunk_size exceeds total_size.";
     return out;
