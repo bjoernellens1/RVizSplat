@@ -204,10 +204,11 @@ TileAssembler::Result TileAssembler::addChunk(
     }
   }
 
-  if (!assembly.received[msg.chunk_index]) {
-    assembly.received[msg.chunk_index] = true;
-    ++assembly.received_count;
+  if (assembly.received[msg.chunk_index]) {
+    return result;
   }
+  assembly.received[msg.chunk_index] = true;
+  ++assembly.received_count;
   assembly.chunks[msg.chunk_index] = msg.data;
 
   if (assembly.received_count != assembly.chunk_count) {
@@ -233,6 +234,18 @@ TileAssembler::Result TileAssembler::addChunk(
   result.complete = true;
   assemblies_.erase(key);
   return result;
+}
+
+bool TileAssembler::hasIncomplete(const std::string & session_id, uint64_t version) const
+{
+  for (const auto & entry : assemblies_) {
+    if (entry.first.session_id == session_id && entry.first.version == version &&
+      entry.second.received_count != entry.second.chunk_count)
+    {
+      return true;
+    }
+  }
+  return false;
 }
 
 LoadResult TileCache::handleMessage(const gsplat_msgs::msg::SplatTileChunk & msg)
@@ -299,6 +312,11 @@ LoadResult TileCache::decodeAndQueueUpsert(
 
 LoadResult TileCache::commit(const std::string & session_id, uint64_t version)
 {
+  if (assembler_.hasIncomplete(session_id, version)) {
+    return errorResult("Cannot commit tile version " + std::to_string(version) +
+      " while one or more tile assemblies are incomplete.");
+  }
+
   const auto key = std::make_pair(session_id, version);
   auto it = pending_.find(key);
   if (it == pending_.end()) return snapshot();
