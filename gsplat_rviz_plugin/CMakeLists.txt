@@ -70,6 +70,8 @@ set(gsplat_rviz_plugin_source_files
   src/gsplat_rviz_plugin/splat_loaders/snapshot_payload_loader.cpp
   src/gsplat_rviz_plugin/splat_loaders/snapshot_ref_source.cpp
   src/gsplat_rviz_plugin/splat_loaders/blob_topic_source.cpp
+  src/gsplat_rviz_plugin/splat_loaders/tile_cache.cpp
+  src/gsplat_rviz_plugin/splat_loaders/tile_stream_source.cpp
   src/gsplat_rviz_plugin/transparency/wboit_compositor.cpp
 )
 
