@@ -23,6 +23,7 @@
 #include "gsplat_rviz_plugin/sorters/sorter_factory.hpp"
 #include "gsplat_rviz_plugin/splat_loaders/ply_file_source.hpp"
 #include "gsplat_rviz_plugin/splat_loaders/ros_topic_source.hpp"
+#include "gsplat_rviz_plugin/splat_loaders/tile_stream_source.hpp"
 #include "gsplat_rviz_plugin/splat_cloud.hpp"
 #include "gsplat_rviz_plugin/splat_gpu.hpp"
 #include "gsplat_rviz_plugin/transparency/wboit_compositor.hpp"
@@ -44,6 +45,8 @@ GsplatDisplay::GsplatDisplay()
     this, SLOT(onSourceModeChanged()), this);
   source_mode_property_->addOption("PLY File", static_cast<int>(SourceMode::File));
   source_mode_property_->addOption("Topic",    static_cast<int>(SourceMode::Topic));
+  source_mode_property_->addOption(
+    "Tile Stream", static_cast<int>(SourceMode::TileStream));
 
   splat_path_property_ = new rviz_common::properties::FilePickerProperty(
     "Splat File", "",
@@ -59,6 +62,15 @@ GsplatDisplay::GsplatDisplay()
     this, SLOT(onTopicChanged()), this);
   // Default mode is PLY File — hide the topic field until the user flips it.
   topic_property_->hide();
+
+  tile_topic_property_ = new rviz_common::properties::RosTopicProperty(
+    "Tile Stream Topic", "",
+    "gsplat_msgs/msg/SplatTileChunk",
+    "gsplat_msgs/SplatTileChunk topic to subscribe to. Chunks are assembled "
+    "into a persistent tile cache and committed versions replace the displayed "
+    "snapshot.",
+    this, SLOT(onTileTopicChanged()), this);
+  tile_topic_property_->hide();
 
   buildAdvancedGroup();
 }
@@ -205,6 +217,7 @@ void GsplatDisplay::onInitialize()
   rebuildSorter();
 
   topic_property_->initialize(context_->getRosNodeAbstraction());
+  tile_topic_property_->initialize(context_->getRosNodeAbstraction());
 
   // Seed uniforms from the initial property values.
   onClipChanged();
@@ -216,13 +229,15 @@ void GsplatDisplay::onEnable()
 {
   if (currentMode() == SourceMode::Topic) {
     onTopicChanged();
+  } else if (currentMode() == SourceMode::TileStream) {
+    onTileTopicChanged();
   }
   applyTransparencyMode();
 }
 
 void GsplatDisplay::onDisable()
 {
-  if (source_kind_ == SourceKind::Topic) {
+  if (source_kind_ == SourceKind::Topic || source_kind_ == SourceKind::TileStream) {
     ++source_gen_;
     source_.reset();
     source_kind_ = SourceKind::None;
@@ -313,6 +328,41 @@ void GsplatDisplay::onTopicChanged()
     SourceKind::Topic);
 }
 
+void GsplatDisplay::onTileTopicChanged()
+{
+  if (currentMode() != SourceMode::TileStream) return;
+
+  if (!isEnabled()) {
+    ++source_gen_;
+    source_.reset();
+    source_kind_ = SourceKind::None;
+    return;
+  }
+
+  const std::string topic = tile_topic_property_->getTopicStd();
+  if (topic.empty()) {
+    ++source_gen_;
+    source_.reset();
+    source_kind_ = SourceKind::None;
+    setStatus(
+      rviz_common::properties::StatusProperty::Warn,
+      "Tile Stream", "No tile stream topic selected.");
+    return;
+  }
+
+  auto node_abs = context_ ? context_->getRosNodeAbstraction().lock() : nullptr;
+  if (!node_abs) {
+    setStatus(
+      rviz_common::properties::StatusProperty::Error,
+      "Tile Stream", "RViz ROS node unavailable.");
+    return;
+  }
+
+  installSource(
+    std::make_unique<TileStreamSource>(node_abs->get_raw_node(), topic),
+    SourceKind::TileStream);
+}
+
 void GsplatDisplay::onSorterKindChanged()
 {
   rebuildSorter();
@@ -337,13 +387,18 @@ void GsplatDisplay::onSourceModeChanged()
   const auto mode = currentMode();
   splat_path_property_->setHidden(mode != SourceMode::File);
   topic_property_->setHidden(mode != SourceMode::Topic);
+  tile_topic_property_->setHidden(mode != SourceMode::TileStream);
 
-  deleteStatus(mode == SourceMode::File ? "Topic" : "Splat File");
+  deleteStatus("Splat File");
+  deleteStatus("Topic");
+  deleteStatus("Tile Stream");
 
   if (mode == SourceMode::File) {
     onSplatPathChanged();
-  } else {
+  } else if (mode == SourceMode::Topic) {
     onTopicChanged();
+  } else {
+    onTileTopicChanged();
   }
 }
 
@@ -462,7 +517,8 @@ void GsplatDisplay::onLoadResult(
   if (gen != source_gen_ || !splat_cloud_) return;
 
   const char * status_key =
-    (kind == SourceKind::Topic) ? "Topic" : "Splat File";
+    (kind == SourceKind::Topic) ? "Topic" :
+    (kind == SourceKind::TileStream) ? "Tile Stream" : "Splat File";
 
   if (!result.ok()) {
     setStatus(
@@ -487,7 +543,7 @@ void GsplatDisplay::onLoadResult(
   setStatus(
     rviz_common::properties::StatusProperty::Ok,
     status_key,
-    kind == SourceKind::Topic
+    kind == SourceKind::Topic || kind == SourceKind::TileStream
       ? QString("Received %1 gaussians (SH degree %2)").arg(count).arg(sh_degree)
       : QString("Loaded %1 gaussians").arg(count));
 }
