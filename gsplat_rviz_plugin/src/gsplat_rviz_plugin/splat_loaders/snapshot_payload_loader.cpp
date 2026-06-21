@@ -24,7 +24,7 @@ LoadResult loadSnapshotPayload(
     return out;
   }
 
-  if (format == "ply_binary" || format == "ply_ascii") {
+  if (format == "ply_binary" || format == "ply_ascii" || format == "ply") {
     out.splats = loadPlyBytes(payload, out.error, out.sh_degree);
   } else if (format == "compact_dc_fp16_cov_rgba_v1") {
     out.splats = decodeCompactDcFp16CovRgbaV1(payload, out.error);
