@@ -77,7 +77,7 @@ class BlobSnapshotPublisher(Node):
     def _load_payload(ply_path: str, mode: str) -> tuple[bytes, str]:
         if mode == 'binary_ply':
             with open(ply_path, 'rb') as ply_file:
-                return ply_file.read(), 'ply'
+                return ply_file.read(), 'ply_binary'
         if mode == 'compact':
             vertices = read_ply_vertex(ply_path)
             return encode_compact_dc_fp16_cov_rgba_v1(vertices), COMPACT_DC_FP16_COV_RGBA_V1
