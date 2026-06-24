@@ -63,13 +63,22 @@ on this host). For 1 MiB chunks the CRC adds ~80 ms/chunk — acceptable for lat
 one-shot publishes, overhead for high-rate streaming. Disable with `enable_crc=False`
 if throughput is the priority.
 
-## Known issues
+## Known issues (resolved)
 
-- **Tile stream not rendering in RViz2** — under investigation. The tile cache requires
-  a valid COMMIT after all UPSERT_TILE chunks are assembled. Suspected causes:
-  session/version key mismatch between cycles, CLEAR_ALL being dropped on VOLATILE
-  subscriber, or `hasIncomplete()` blocking the COMMIT callback. See tile stream debug
-  findings once resolved.
+- **Tile stream not rendering in RViz2** — fixed. Three root causes identified and
+  patched:
+  1. **QoS durability mismatch** (`tile_stream_source.cpp`): subscriber used
+     `VOLATILE`, publisher used `TRANSIENT_LOCAL`. Subscriber now uses
+     `TRANSIENT_LOCAL` with depth=100.
+  2. **QoS history depth too small** (`rate_publisher_all.py`): `LATCHED_QOS`
+     depth=10 could not hold a full CLEAR_ALL+UPSERT_TILE×N+COMMIT cycle for
+     multi-tile scenes. `TILE_QOS` with depth=500 is now used for tile publishers.
+  3. **Orphaned pending ops on failed COMMIT** (`tile_cache.cpp`): when COMMIT
+     arrived with incomplete tile assemblies, pending ops and assembly entries were
+     leaked. `TileAssembler::discardVersion()` now cleans them up on error.
+  4. **Version not incremented between cycles** (`rate_publisher_all.py`): tile
+     messages were pre-built once with version=1; now rebuilt each cycle with the
+     incremented version.
 - **SplatArray serialization** is done per-splat in Python (loop), making it slow for
   large scenes. The splatograph-rvizsplat-transport fork uses a vectorised CDR
   serialiser (~100× faster) for live publishing.
