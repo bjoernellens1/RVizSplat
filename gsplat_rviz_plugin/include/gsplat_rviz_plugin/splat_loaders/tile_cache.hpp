@@ -44,6 +44,7 @@ public:
 
   Result addChunk(const gsplat_msgs::msg::SplatTileChunk & msg);
   bool hasIncomplete(const std::string & session_id, uint64_t version) const;
+  void discardVersion(const std::string & session_id, uint64_t version);
 
 private:
   struct AssemblyKey

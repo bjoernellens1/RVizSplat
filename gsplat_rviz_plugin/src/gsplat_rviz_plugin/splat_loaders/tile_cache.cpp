@@ -248,6 +248,17 @@ bool TileAssembler::hasIncomplete(const std::string & session_id, uint64_t versi
   return false;
 }
 
+void TileAssembler::discardVersion(const std::string & session_id, uint64_t version)
+{
+  for (auto it = assemblies_.begin(); it != assemblies_.end(); ) {
+    if (it->first.session_id == session_id && it->first.version == version) {
+      it = assemblies_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
+
 LoadResult TileCache::handleMessage(const gsplat_msgs::msg::SplatTileChunk & msg)
 {
   const auto pending_key = std::make_pair(msg.session_id, msg.version);
@@ -313,6 +324,10 @@ LoadResult TileCache::decodeAndQueueUpsert(
 LoadResult TileCache::commit(const std::string & session_id, uint64_t version)
 {
   if (assembler_.hasIncomplete(session_id, version)) {
+    // Discard orphaned pending ops for this version to avoid a memory leak
+    // and leave a stale partial state if chunks never arrive.
+    pending_.erase(std::make_pair(session_id, version));
+    assembler_.discardVersion(session_id, version);
     return errorResult("Cannot commit tile version " + std::to_string(version) +
       " while one or more tile assemblies are incomplete.");
   }
