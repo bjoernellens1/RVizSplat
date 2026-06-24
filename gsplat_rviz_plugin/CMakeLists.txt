@@ -106,13 +106,9 @@ target_link_libraries(gsplat_rviz_plugin PUBLIC
   rviz_rendering::rviz_rendering
   GLEW::GLEW
   Boost::boost
+  ${geometry_msgs_TARGETS}
+  gsplat_msgs::gsplat_msgs__rosidl_typesupport_cpp
 )
-ament_target_dependencies(gsplat_rviz_plugin geometry_msgs)
-
-#rosidl_get_typesupport_target(cpp_typesupport_target gsplat_msgs "rosidl_typesupport_cpp")
-target_link_libraries(gsplat_rviz_plugin PUBLIC
-    gsplat_msgs::gsplat_msgs__rosidl_typesupport_cpp
-  )
 #target_link_libraries(gsplat_rviz_plugin PUBLIC "${cpp_typesupport_target}")
 
 target_compile_definitions(gsplat_rviz_plugin PRIVATE "GSPLAT_RVIZ_PLUGIN_BUILDING_LIBRARY")
