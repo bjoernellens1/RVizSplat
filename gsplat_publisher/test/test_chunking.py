@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 from gsplat_publisher.chunking import build_blob_chunks
 from gsplat_publisher.chunking import build_tile_chunks
+from gsplat_publisher.chunking import crc64_ecma
 
 
 class FakeBlobChunk:
@@ -39,7 +40,7 @@ def test_build_blob_chunks_sets_metadata_and_sizes():
     assert all(c.version == 7 for c in chunks)
     assert all(c.format == 'compact_dc_fp16_cov_rgba_v1' for c in chunks)
     assert all(c.compression == 'none' for c in chunks)
-    assert all(c.chunk_crc64 == 0 for c in chunks)
+    assert all(c.chunk_crc64 == crc64_ecma(bytes(c.data)) for c in chunks)
     assert all(c.replace_current for c in chunks)
     assert all(c.header.frame_id == 'map' for c in chunks)
 
@@ -93,4 +94,4 @@ def test_empty_tile_commit_is_one_chunk():
     assert len(chunks) == 1
     assert chunks[0].operation == FakeTileChunk.COMMIT
     assert chunks[0].splat_count == 0
-    assert chunks[0].data == []
+    assert bytes(chunks[0].data) == b''

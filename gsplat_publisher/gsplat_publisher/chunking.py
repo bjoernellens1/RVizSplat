@@ -2,9 +2,52 @@
 
 from __future__ import annotations
 
+import array as _array
 import math
 from collections.abc import Callable, Sequence
 from typing import Any
+
+_CRC64_POLY = 0x42F0E1EBA9EA3693
+
+
+def _build_crc64_table() -> list[int]:
+    table = []
+    for b in range(256):
+        crc = b << 56
+        for _ in range(8):
+            if crc & 0x8000000000000000:
+                crc = ((crc << 1) & 0xFFFFFFFFFFFFFFFF) ^ _CRC64_POLY
+            else:
+                crc = (crc << 1) & 0xFFFFFFFFFFFFFFFF
+        table.append(crc)
+    return table
+
+
+_CRC64_TABLE = _build_crc64_table()
+
+
+def _crc64_ecma_pure(data: bytes | bytearray) -> int:
+    crc = 0
+    for byte in data:
+        idx = ((crc >> 56) ^ byte) & 0xFF
+        crc = ((crc << 8) & 0xFFFFFFFFFFFFFFFF) ^ _CRC64_TABLE[idx]
+    return crc
+
+
+try:
+    import crcmod as _crcmod
+    # CRC-64/ECMA-182: poly=0x42F0E1EBA9EA3693, init=0, rev=False, xorOut=0
+    # crcmod expects the poly with the implicit leading 1 bit included
+    _crc64_fn = _crcmod.mkCrcFun(0x142F0E1EBA9EA3693, initCrc=0, rev=False, xorOut=0)
+
+    def crc64_ecma(data: bytes | bytearray) -> int:
+        """CRC-64/ECMA-182. Matches blob_assembler.cpp crc64Ecma()."""
+        return _crc64_fn(data)
+
+except Exception:
+    def crc64_ecma(data: bytes | bytearray) -> int:  # type: ignore[misc]
+        """CRC-64/ECMA-182. Matches blob_assembler.cpp crc64Ecma()."""
+        return _crc64_ecma_pure(data)
 
 
 def split_bytes(payload: bytes, max_chunk_bytes: int) -> list[bytes]:
@@ -42,6 +85,8 @@ def build_blob_chunks(
     frame_id: str | None = None,
     stamp: Any | None = None,
     chunk_crc64: int = 0,
+    enable_crc: bool = True,
+    map_from_source: Any | None = None,
 ) -> list[Any]:
     """Return SplatBlobChunk messages for *payload*."""
     if msg_factory is None:
@@ -64,9 +109,11 @@ def build_blob_chunks(
         msg.uncompressed_size = raw_size
         msg.format = format
         msg.compression = compression
-        msg.data = list(part)
-        msg.chunk_crc64 = chunk_crc64
+        msg.data = _array.array('B', part)
+        msg.chunk_crc64 = crc64_ecma(part) if enable_crc else chunk_crc64
         msg.replace_current = replace_current
+        if map_from_source is not None:
+            msg.map_from_source = map_from_source
         messages.append(msg)
     return messages
 
@@ -89,6 +136,7 @@ def build_tile_chunks(
     frame_id: str | None = None,
     stamp: Any | None = None,
     chunk_crc64: int = 0,
+    enable_crc: bool = False,
 ) -> list[Any]:
     """Return SplatTileChunk messages for one tile payload."""
     if msg_factory is None:
@@ -119,8 +167,8 @@ def build_tile_chunks(
         msg.splat_count = int(splat_count)
         msg.stride = int(stride)
         msg.uncompressed_size = int(raw_size)
-        msg.data = list(part)
-        msg.chunk_crc64 = chunk_crc64
+        msg.data = _array.array('B', part)
+        msg.chunk_crc64 = crc64_ecma(part) if enable_crc else chunk_crc64
         messages.append(msg)
     return messages
 

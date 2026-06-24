@@ -33,8 +33,8 @@ void BlobTopicSource::start(Callback cb)
     return;
   }
 
-  rclcpp::QoS qos(64);
-  qos.reliable().durability_volatile();
+  rclcpp::QoS qos(rclcpp::KeepLast(64));
+  qos.reliable().transient_local();
 
   try {
     subscription_ = node_->create_subscription<gsplat_msgs::msg::SplatBlobChunk>(
